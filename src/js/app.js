@@ -2,6 +2,8 @@ import $ from 'jquery';
 import BooksController from './bookscontroller';
 import Book from './book';
 
+import '../css/site.less';
+
 let booksController = new BooksController();
 
 $('#save').on('click', () => {

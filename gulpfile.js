@@ -1,69 +1,52 @@
 var gulp = require('gulp'),
-  $ = require('gulp-load-plugins')();
+  $ = require('gulp-load-plugins')(),
+  webpack = require('webpack'),
+  webpackConfig = require('./webpack.config'),
+  WebpackDevServer = require('webpack-dev-server'),
+  ExtractTextPlugin = require('extract-text-webpack-plugin');
 
-gulp.task('dev:js', () => {
-  return gulp.src('./src/js/**/*.js')
-    .pipe($.sourcemaps.init())
-    .pipe($.babel())
-    .pipe($.sourcemaps.write())
-    .pipe(gulp.dest('./public/js'))
-    .pipe($.livereload());
+const webpackCompilation = (config, callback) => {
+  const compiler = webpack(config());
+  compiler.run((err, stats) => {
+    if (err) {
+      console.error(err);
+      return;
+    }
+
+    console.log(stats.toString({ colors: true }));
+    callback();
+  });
+};
+
+gulp.task('dev', (callback) => webpackCompilation(devConfig, callback));
+
+gulp.task('prod', (callback) => webpackCompilation(prodConfig, callback));
+
+gulp.task('watch', (callback) => {
+  const compiler = webpack(devConfig());
+  const devServer = new WebpackDevServer(compiler, {
+    inline: true,
+    stats: { colors: true, exclude: ["node_modules"] }
+  });
+
+  devServer.listen(8081, "localhost", () => {
+    console.log("Dev server started");
+  });
 });
 
-gulp.task('prod:js', gulp.series(
-  () => {
-    return gulp.src('./src/js/**/*.js')
-      .pipe($.babel())
-      .pipe(gulp.dest('./public/js'));
-  },
-  () => {
-    return gulp.src('./public/js/app.js')
-      .pipe($.requirejsOptimize({ mainConfigFile: './public/config.js' }))
-      .pipe(gulp.dest('./dist/js'))
-  }
-));
 
-gulp.task('dev:css', () => {
-  return gulp.src('./src/css/site.less')
-    .pipe($.sourcemaps.init())
-    .pipe($.less())
-    .pipe($.sourcemaps.write())
-    .pipe(gulp.dest('./public/css'))
-    .pipe($.livereload());
-});
+function devConfig(){
+  var c = webpackConfig.clone();
+  c.output.publicPath = 'http://localhost:8081';
+  c.devtool = "eval-source-map";
+  return c;
+}
 
-gulp.task('prod:css', () => {
-  return gulp.src('./src/css/site.less')
-    .pipe($.less())
-    .pipe($.minifyCss())
-    .pipe(gulp.dest('./dist/css'))
-});
-
-gulp.task('prod:copy-files', gulp.parallel(
-  () => {
-    return gulp.src(['./public/index.html', './public/config.js'])
-      .pipe(gulp.dest('./dist'));
-  },
-  () => {
-    return gulp.src(['./public/lib/requirejs/require.js'])
-      .pipe(gulp.dest('./dist/lib/requirejs'))
-  },
-  () => {
-    return gulp.src(['./public/lib/bootstrap/dist/css/bootstrap.min.css'])
-      .pipe(gulp.dest('./dist/lib/bootstrap/dist/css'))
-  }
-));
-
-gulp.task('dev', gulp.parallel('dev:css', 'dev:js'));
-
-gulp.task('prod', gulp.parallel('prod:css', 'prod:js', 'prod:copy-files'));
-
-gulp.task('watch', gulp.series(
-  'dev',
-  () => {
-    gulp.watch('./src/js', gulp.series('dev:js'));
-    gulp.watch('./src/css', gulp.series('dev:css'));
-
-    $.livereload.listen();
-  }
-));
+function prodConfig(){
+  var c = webpackConfig.clone();
+  c.plugins.push(new webpack.optimize.UglifyJsPlugin());
+  c.plugins.push(new ExtractTextPlugin("[name].css"));
+  c.module.loaders[1].loader = ExtractTextPlugin.extract("css!less");
+  c.module.loaders[2].loader = ExtractTextPlugin.extract("css");
+  return c;
+}
